@@ -6,6 +6,7 @@ export const invokeRequest = async (
   requestInit: {
     headers: IncomingMessage['headers']
     method: IncomingMessage['method']
+    signal?: AbortSignal
   },
   readableBody?: import('stream').Readable
 ) => {
@@ -28,6 +29,7 @@ export const invokeRequest = async (
           {
             headers: invokeHeaders,
             method: requestInit.method,
+            signal: requestInit.signal,
           },
           (res) => {
             resolveInvoke(res)

@@ -1483,6 +1483,9 @@ export default class NextNodeServer extends BaseServer {
               {
                 headers: invokeHeaders,
                 method: req.method,
+                signal: signalFromNodeResponse(
+                  (res as NodeNextResponse).originalResponse
+                ),
               },
               getRequestMeta(req, '__NEXT_CLONABLE_BODY')?.cloneBodyStream()
             )
@@ -2500,6 +2503,9 @@ export default class NextNodeServer extends BaseServer {
                   {
                     headers: invokeHeaders,
                     method: req.method,
+                    signal: signalFromNodeResponse(
+                      (res as NodeNextResponse).originalResponse
+                    ),
                   },
                   getRequestMeta(req, '__NEXT_CLONABLE_BODY')?.cloneBodyStream()
                 )
