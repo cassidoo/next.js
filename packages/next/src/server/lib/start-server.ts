@@ -310,11 +310,7 @@ export async function startServer({
           res.on('close', () => proxyReq.destroy())
         })
         proxyServer.on('proxyRes', (proxyRes) => {
-          if (res.closed) {
-            proxyRes.destroy()
-          } else {
-            res.on('close', () => proxyRes.destroy())
-          }
+          res.on('close', () => proxyRes.destroy())
         })
 
         proxyServer.web(req, res)
