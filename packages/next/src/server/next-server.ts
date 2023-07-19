@@ -85,7 +85,7 @@ import { getCustomRoute, stringifyQuery } from './server-route-utils'
 import { urlQueryToSearchParams } from '../shared/lib/router/utils/querystring'
 import { removeTrailingSlash } from '../shared/lib/router/utils/remove-trailing-slash'
 import { getNextPathnameInfo } from '../shared/lib/router/utils/get-next-pathname-info'
-import { getCloneableBody } from './body-streams'
+import { getCloneableBody, streamToNodeResponse } from './body-streams'
 import { checkIsOnDemandRevalidate } from './api-utils'
 import ResponseCache from './response-cache'
 import { IncrementalCache } from './lib/incremental-cache'
@@ -994,12 +994,13 @@ export default class NextNodeServer extends BaseServer {
     )
   }
 
-  private streamResponseChunk(res: ServerResponse, chunk: any) {
-    res.write(chunk)
+  private flushIfCompression(res: ServerResponse) {
     // When both compression and streaming are enabled, we need to explicitly
     // flush the response to avoid it being buffered by gzip.
     if (this.compression && 'flush' in res) {
-      ;(res as any).flush()
+      return () => {
+        ;(res as any).flush()
+      }
     }
   }
 
@@ -1534,10 +1535,11 @@ export default class NextNodeServer extends BaseServer {
             res.statusMessage = invokeRes.statusMessage
 
             const { originalResponse } = res as NodeNextResponse
-            for await (const chunk of invokeRes) {
-              if (originalResponse.destroyed) break
-              this.streamResponseChunk(originalResponse, chunk)
-            }
+            await streamToNodeResponse(
+              invokeRes,
+              originalResponse,
+              this.flushIfCompression(originalResponse)
+            )
             res.send()
             return {
               finished: true,
@@ -2556,11 +2558,11 @@ export default class NextNodeServer extends BaseServer {
                   res.statusCode = result.response.status
 
                   const { originalResponse } = res as NodeNextResponse
-                  for await (const chunk of result.response.body ||
-                    ([] as any)) {
-                    if (originalResponse.destroyed) break
-                    this.streamResponseChunk(originalResponse, chunk)
-                  }
+                  await streamToNodeResponse(
+                    result.response.body || null,
+                    originalResponse,
+                    this.flushIfCompression(originalResponse)
+                  )
                   res.send()
                   return {
                     finished: true,
@@ -2732,11 +2734,16 @@ export default class NextNodeServer extends BaseServer {
 
               const { originalResponse } = res as NodeNextResponse
               const body =
-                (result.response as any).invokeRes || result.response.body || []
-              for await (const chunk of body) {
-                if (originalResponse.destroyed) break
-                this.streamResponseChunk(originalResponse, chunk)
-              }
+                ((result.response as any).invokeRes as
+                  | Awaited<ReturnType<typeof invokeRequest>>
+                  | undefined) ||
+                result.response.body ||
+                null
+              await streamToNodeResponse(
+                body,
+                originalResponse,
+                this.flushIfCompression(originalResponse)
+              )
               res.send()
               return {
                 finished: true,
@@ -2924,16 +2931,8 @@ export default class NextNodeServer extends BaseServer {
 
     const nodeResStream = (params.res as NodeNextResponse).originalResponse
     if (result.response.body) {
-      // TODO(gal): not sure that we always need to stream
-      const { consumeUint8ArrayReadableStream } =
-        require('next/dist/compiled/edge-runtime') as typeof import('next/dist/compiled/edge-runtime')
       try {
-        for await (const chunk of consumeUint8ArrayReadableStream(
-          result.response.body
-        )) {
-          if (nodeResStream.destroyed) break
-          nodeResStream.write(chunk)
-        }
+        await streamToNodeResponse(result.response.body, nodeResStream)
       } finally {
         nodeResStream.end()
       }

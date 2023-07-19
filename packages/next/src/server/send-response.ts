@@ -1,5 +1,6 @@
 import type { BaseNextRequest, BaseNextResponse } from './base-http'
 import type { NodeNextResponse } from './base-http/node'
+import { streamToNodeResponse } from './body-streams'
 import { splitCookiesString } from './web/utils'
 
 /**
@@ -44,14 +45,8 @@ export async function sendResponse(
 
     // A response body must not be sent for HEAD requests. See https://httpwg.org/specs/rfc9110.html#HEAD
     if (response.body && req.method !== 'HEAD') {
-      const { consumeUint8ArrayReadableStream } =
-        require('next/dist/compiled/edge-runtime') as typeof import('next/dist/compiled/edge-runtime')
-      const iterator = consumeUint8ArrayReadableStream(response.body)
       try {
-        for await (const chunk of iterator) {
-          if (originalResponse.destroyed) break
-          originalResponse.write(chunk)
-        }
+        await streamToNodeResponse(response.body, originalResponse)
       } finally {
         originalResponse.end()
       }

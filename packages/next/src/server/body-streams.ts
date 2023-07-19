@@ -1,4 +1,4 @@
-import type { IncomingMessage } from 'http'
+import type { IncomingMessage, Server, ServerResponse } from 'http'
 import { PassThrough, Readable } from 'stream'
 
 export function requestToBodyStream(
@@ -87,5 +87,104 @@ export function getCloneableBody<T extends IncomingMessage>(
       buffered = p2
       return p1
     },
+  }
+}
+
+async function streamReadableToResponse(
+  stream: Readable,
+  response: ServerResponse,
+  onWrite: () => void
+) {
+  let responseOpen = true
+  let streamDone = false
+
+  function onData(chunk: Uint8Array) {
+    response.write(chunk)
+    onWrite()
+  }
+  function onEnd() {
+    streamDone = true
+  }
+  function onClose() {
+    if (responseOpen) {
+      response.end()
+    }
+
+    stream.off('data', onData)
+    stream.off('end', onEnd)
+    stream.off('error', onClose)
+    stream.off('close', onClose)
+  }
+  stream.on('data', onData)
+  stream.on('end', onEnd)
+  stream.on('error', onClose)
+  stream.on('close', onClose)
+
+  response.on('close', () => {
+    responseOpen = false
+    if (!streamDone) {
+      streamDone = true
+      stream.destroy()
+    }
+  })
+}
+
+async function streamReadableStreamToResponse(
+  stream: ReadableStream<Uint8Array>,
+  response: ServerResponse,
+  onWrite: () => void
+) {
+  const reader = stream.getReader()
+  let responseOpen = true
+  let streamDone = false
+
+  response.on('close', () => {
+    responseOpen = false
+    if (!streamDone) {
+      streamDone = true
+      reader.cancel().catch(() => {})
+    }
+  })
+
+  try {
+    while (responseOpen) {
+      const { done, value } = await reader.read()
+      if (done) {
+        streamDone = true
+        break
+      }
+
+      response.write(value)
+      onWrite()
+    }
+  } catch (e) {
+    // The reader threw an error
+    streamDone = true
+    throw e
+  } finally {
+    // The reader is guaranteed to be closed by this point because either we
+    // fully drained the reader (`done = true`), the reader threw an error, or
+    // the client disconnected and we called `reader.cancel()` already.
+
+    if (responseOpen) {
+      response.end()
+    }
+  }
+}
+
+export function streamToNodeResponse(
+  stream: Readable | ReadableStream<Uint8Array> | null,
+  response: ServerResponse,
+  onWrite?: () => void
+) {
+  if (stream == null) {
+    return
+  }
+  onWrite ??= () => {}
+
+  if ('getReader' in stream) {
+    streamReadableStreamToResponse(stream, response, onWrite)
+  } else {
+    streamReadableToResponse(stream, response, onWrite)
   }
 }
