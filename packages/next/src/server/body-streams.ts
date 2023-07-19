@@ -90,42 +90,45 @@ export function getCloneableBody<T extends IncomingMessage>(
   }
 }
 
-async function streamReadableToResponse(
+function streamReadableToResponse(
   stream: Readable,
   response: ServerResponse,
   onWrite: () => void
 ) {
-  let responseOpen = true
-  let streamDone = false
+  return new Promise<void>((resolve) => {
+    let responseOpen = true
+    let streamDone = false
 
-  function onData(chunk: Uint8Array) {
-    response.write(chunk)
-    onWrite()
-  }
-  function onEnd() {
-    streamDone = true
-  }
-  function onClose() {
-    if (responseOpen) {
-      response.end()
+    function onData(chunk: Uint8Array) {
+      response.write(chunk)
+      onWrite()
     }
-
-    stream.off('data', onData)
-    stream.off('end', onEnd)
-    stream.off('error', onClose)
-    stream.off('close', onClose)
-  }
-  stream.on('data', onData)
-  stream.on('end', onEnd)
-  stream.on('error', onClose)
-  stream.on('close', onClose)
-
-  response.on('close', () => {
-    responseOpen = false
-    if (!streamDone) {
+    function onEnd() {
       streamDone = true
-      stream.destroy()
     }
+    function onClose() {
+      if (responseOpen) {
+        response.end()
+      }
+      resolve()
+
+      stream.off('data', onData)
+      stream.off('end', onEnd)
+      stream.off('error', onClose)
+      stream.off('close', onClose)
+    }
+    stream.on('data', onData)
+    stream.on('end', onEnd)
+    stream.on('error', onClose)
+    stream.on('close', onClose)
+
+    response.on('close', () => {
+      responseOpen = false
+      if (!streamDone) {
+        streamDone = true
+        stream.destroy()
+      }
+    })
   })
 }
 
@@ -183,8 +186,8 @@ export function streamToNodeResponse(
   onWrite ??= () => {}
 
   if ('getReader' in stream) {
-    streamReadableStreamToResponse(stream, response, onWrite)
+    return streamReadableStreamToResponse(stream, response, onWrite)
   } else {
-    streamReadableToResponse(stream, response, onWrite)
+    return streamReadableToResponse(stream, response, onWrite)
   }
 }
