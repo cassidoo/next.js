@@ -1,24 +1,34 @@
 import * as stream from 'stream'
 import { Deferred, sleep } from './sleep'
 
-export function Readable() {
+export function Readable(write: boolean) {
   const encoder = new TextEncoder()
-  const clean = new Deferred()
+  const cleanedUp = new Deferred()
+  const aborted = new Deferred()
+  let i = 0
+
   const readable = {
-    i: 0,
-    streamCleanedUp: clean.promise,
+    finished: Promise.all([cleanedUp.promise, aborted.promise]).then(() => i),
+
+    abort() {
+      aborted.resolve()
+    },
     stream: new stream.Readable({
       async read() {
-        await sleep(100)
-        this.push(encoder.encode(String(readable.i++)))
+        if (!write) {
+          return
+        }
 
-        if (readable.i >= 25) {
-          clean.reject()
+        await sleep(100)
+        this.push(encoder.encode(String(i++)))
+
+        if (i >= 25) {
+          cleanedUp.reject()
           this.push(null)
         }
       },
       destroy() {
-        clean.resolve()
+        cleanedUp.resolve()
       },
     }),
   }

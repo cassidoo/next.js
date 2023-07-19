@@ -1,23 +1,32 @@
 import { Deferred, sleep } from './sleep'
 
-export function Streamable() {
+export function Streamable(write: boolean) {
   const encoder = new TextEncoder()
-  const clean = new Deferred()
+  const cleanedUp = new Deferred()
+  const aborted = new Deferred()
+  let i = 0
+
   const streamable = {
-    i: 0,
-    streamCleanedUp: clean.promise,
+    finished: Promise.all([cleanedUp.promise, aborted.promise]).then(() => i),
+
+    abort() {
+      aborted.resolve()
+    },
     stream: new ReadableStream({
       async pull(controller) {
+        if (!write) {
+          return
+        }
         await sleep(100)
-        controller.enqueue(encoder.encode(String(streamable.i++)))
+        controller.enqueue(encoder.encode(String(i++)))
 
-        if (streamable.i >= 25) {
-          clean.reject()
+        if (i >= 25) {
+          cleanedUp.reject()
           controller.close()
         }
       },
       cancel() {
-        clean.resolve()
+        cleanedUp.resolve()
       },
     }),
   }

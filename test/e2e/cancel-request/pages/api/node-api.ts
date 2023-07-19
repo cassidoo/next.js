@@ -1,38 +1,39 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { pipeline } from 'stream'
 import { Readable } from '../../readable'
-import { Deferred } from '../../sleep'
 
 export const config = {
   runtime: 'nodejs',
 }
 
-let readable
-let requestAborted = new Deferred()
+let readable: ReturnType<typeof Readable> | undefined
 
 export default function handler(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse
-): void {
+): Promise<void> {
   // Pages API requests have already consumed the body.
   // This is so we don't confuse the request close with the connection close.
 
   // The 2nd request should render the stats. We don't use a query param
   // because edge rendering will create a different bundle for that.
   if (readable) {
-    Promise.all([requestAborted.promise, readable.streamCleanedUp]).finally(
-      () => {
-        res.end(`${readable.i}`)
-      }
-    )
-    return
+    const old = readable
+    readable = undefined
+    return old.finished.then((i) => {
+      res.end(`${i}`)
+    })
   }
 
-  readable = Readable()
+  const write = new URL(req.url!, 'http://localhost/').searchParams.has('write')
+  const r = (readable = Readable(write))
   res.on('close', () => {
-    requestAborted.resolve()
+    r.abort()
   })
-  pipeline(readable.stream, res, () => {
-    res.end()
+  return new Promise((resolve) => {
+    pipeline(r.stream, res, () => {
+      resolve()
+      res.end()
+    })
   })
 }

@@ -30,39 +30,28 @@ createNextDescribe(
       })
     }
 
-    it('Midddleware cancels inner ReadableStream', async () => {
-      await prime('/middleware')
-      const res = await next.fetch('/middleware')
-      const i = +(await res.text())
-      expect(i).toBeWithin(0, 5)
-    })
+    describe.each([
+      ['middleware', '/middleware'],
+      ['edge app route handler', '/edge-route'],
+      ['node app route handler', '/node-route'],
+      ['edge pages api', '/api/edge-api'],
+      ['node pages api', '/api/node-api'],
+    ])('%s', (_name, path) => {
+      it('cancels stream making progress', async () => {
+        const url = path + '?write'
+        await prime(url)
+        const res = await next.fetch(url)
+        const i = +(await res.text())
+        expect(i).toBeWithin(1, 5)
+      }, 2500)
 
-    it('App Route Handler Edge cancels inner ReadableStream', async () => {
-      await prime('/edge-route')
-      const res = await next.fetch('/edge-route')
-      const i = +(await res.text())
-      expect(i).toBeWithin(0, 5)
-    })
-
-    it('App Route Handler NodeJS cancels inner ReadableStream', async () => {
-      await prime('/node-route')
-      const res = await next.fetch('/node-route')
-      const i = +(await res.text())
-      expect(i).toBeWithin(0, 5)
-    })
-
-    it('Pages Api Route Edge cancels inner ReadableStream', async () => {
-      await prime('/api/edge-api')
-      const res = await next.fetch('/api/edge-api')
-      const i = +(await res.text())
-      expect(i).toBeWithin(0, 5)
-    })
-
-    it('Pages Api Route NodeJS cancels inner ReadableStream', async () => {
-      await prime('/api/node-api')
-      const res = await next.fetch('/api/node-api')
-      const i = +(await res.text())
-      expect(i).toBeWithin(0, 5)
+      it('cancels stalled stream', async () => {
+        const url = path
+        await prime(url)
+        const res = await next.fetch(url)
+        const i = +(await res.text())
+        expect(i).toBe(0)
+      }, 2500)
     })
   }
 )

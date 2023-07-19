@@ -1,12 +1,10 @@
 import { Streamable } from '../../streamable'
-import { Deferred } from '../../sleep'
 
 export const config = {
   runtime: 'edge',
 }
 
-let streamable
-let requestAborted = new Deferred()
+let streamable: ReturnType<typeof Streamable> | undefined
 
 export default async function handler(req: Request): Promise<Response> {
   // Consume the entire request body.
@@ -16,13 +14,16 @@ export default async function handler(req: Request): Promise<Response> {
   // The 2nd request should render the stats. We don't use a query param
   // because edge rendering will create a different bundle for that.
   if (streamable) {
-    await Promise.all([requestAborted.promise, streamable.streamCleanedUp])
-    return new Response(`${streamable.i}`)
+    const old = streamable
+    streamable = undefined
+    const i = await old.finished
+    return new Response(`${i}`)
   }
 
-  streamable = Streamable()
+  const write = new URL(req.url!, 'http://localhost/').searchParams.has('write')
+  const s = (streamable = Streamable(write))
   req.signal.onabort = () => {
-    requestAborted.resolve()
+    s.abort()
   }
-  return new Response(streamable.stream)
+  return new Response(s.stream)
 }
