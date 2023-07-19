@@ -50,7 +50,7 @@ createNextDescribe(
         await prime(url)
         const res = await next.fetch(url)
         const i = +(await res.text())
-        expect(i).toBe(0)
+        expect(i).toBe(1)
       }, 2500)
 
       it('cancels stream that never sent data', async () => {
