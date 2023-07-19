@@ -20,8 +20,8 @@ export async function GET(req: Request): Promise<Response> {
     return new Response(`${i}`)
   }
 
-  const write = new URL(req.url!, 'http://localhost/').searchParams.has('write')
-  const s = (streamable = Streamable(write))
+  const write = new URL(req.url!, 'http://localhost/').searchParams.get('write')
+  const s = (streamable = Streamable(+write!))
   req.signal.onabort = () => {
     s.abort()
   }

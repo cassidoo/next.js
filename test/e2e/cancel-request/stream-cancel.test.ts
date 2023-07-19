@@ -38,7 +38,7 @@ createNextDescribe(
       ['node pages api', '/api/node-api'],
     ])('%s', (_name, path) => {
       it('cancels stream making progress', async () => {
-        const url = path + '?write'
+        const url = path + '?write=25'
         await prime(url)
         const res = await next.fetch(url)
         const i = +(await res.text())
@@ -46,7 +46,15 @@ createNextDescribe(
       }, 2500)
 
       it('cancels stalled stream', async () => {
-        const url = path
+        const url = path + '?write=1'
+        await prime(url)
+        const res = await next.fetch(url)
+        const i = +(await res.text())
+        expect(i).toBe(0)
+      }, 2500)
+
+      it('cancels stream that never sent data', async () => {
+        const url = path + '?write=0'
         await prime(url)
         const res = await next.fetch(url)
         const i = +(await res.text())

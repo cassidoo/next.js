@@ -1,7 +1,7 @@
 import * as stream from 'stream'
 import { Deferred, sleep } from './sleep'
 
-export function Readable(write: boolean) {
+export function Readable(write: number) {
   const encoder = new TextEncoder()
   const cleanedUp = new Deferred()
   const aborted = new Deferred()
@@ -15,17 +15,12 @@ export function Readable(write: boolean) {
     },
     stream: new stream.Readable({
       async read() {
-        if (!write) {
+        if (i >= write) {
           return
         }
 
         await sleep(100)
         this.push(encoder.encode(String(i++)))
-
-        if (i >= 25) {
-          cleanedUp.reject()
-          this.push(null)
-        }
       },
       destroy() {
         cleanedUp.resolve()

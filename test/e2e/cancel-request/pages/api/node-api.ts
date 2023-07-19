@@ -25,8 +25,8 @@ export default function handler(
     })
   }
 
-  const write = new URL(req.url!, 'http://localhost/').searchParams.has('write')
-  const r = (readable = Readable(write))
+  const write = new URL(req.url!, 'http://localhost/').searchParams.get('write')
+  const r = (readable = Readable(+write!))
   res.on('close', () => {
     r.abort()
   })
